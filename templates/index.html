@@ -657,6 +657,28 @@
             </div>
           </div>
 
+          <!-- IMAP -->
+          <div class="panel" style="margin-bottom:16px">
+            <div class="panel-title" style="margin-bottom:12px">
+              📬 Email для кода подтверждения
+              <span style="margin-left:auto;font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">Titan Mail (imap.titan.email)</span>
+            </div>
+            <div class="form-grid" style="margin-bottom:10px">
+              <div class="form-field">
+                <label class="form-label">IMAP Email</label>
+                <input type="email" id="sImapUser" placeholder="your@domain.com"/>
+              </div>
+              <div class="form-field">
+                <label class="form-label">Пароль от почты</label>
+                <input type="password" id="sImapPass" placeholder="••••••••"/>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <button class="btn btn-ghost btn-sm" onclick="testImap()" id="imapTestBtn">🔌 Проверить подключение</button>
+              <span id="imapTestResult" style="font-size:12px;color:var(--muted)"></span>
+            </div>
+          </div>
+
           <!-- Dynamic links -->
           <div class="panel">
             <div class="panel-title">🔗 Ссылки</div>
@@ -903,7 +925,7 @@
   });
 
   // ── LocalStorage ──────────────────────────────────────────────
-  const LS_KEYS = ['sFullName','sRightsOwner','sEmail','sCountry','sSignature','sWorkDesc','sInfDesc','accountUrl'];
+  const LS_KEYS = ['sFullName','sRightsOwner','sEmail','sCountry','sSignature','sWorkDesc','sInfDesc','accountUrl','sImapUser','sImapPass'];
 
   function saveStatic() {
     LS_KEYS.forEach(k => localStorage.setItem(k, document.getElementById(k).value));
@@ -962,6 +984,8 @@
         work_desc:    document.getElementById('sWorkDesc').value.trim(),
         inf_desc:     document.getElementById('sInfDesc').value.trim(),
         signature:    document.getElementById('sSignature').value.trim(),
+        imap_user:    document.getElementById('sImapUser').value.trim(),
+        imap_pass:    document.getElementById('sImapPass').value,
       }),
     });
     const d = await r.json();
@@ -1062,6 +1086,40 @@
     t.textContent = msg;
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 3200);
+  }
+
+  // ── IMAP test ─────────────────────────────────────────────────
+  async function testImap() {
+    const user = document.getElementById('sImapUser').value.trim();
+    const pass = document.getElementById('sImapPass').value;
+    if (!user || !pass) { toast('⚠️ Введи email и пароль', 'warn'); return; }
+
+    const btn    = document.getElementById('imapTestBtn');
+    const result = document.getElementById('imapTestResult');
+    btn.disabled = true;
+    result.style.color = 'var(--muted)';
+    result.textContent = '⏳ Проверяю...';
+
+    try {
+      const r = await fetch('/api/test-imap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imap_user: user, imap_pass: pass }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        result.style.color = 'var(--green)';
+        result.textContent = '✅ ' + d.message;
+      } else {
+        result.style.color = 'var(--red)';
+        result.textContent = '❌ ' + d.message;
+      }
+    } catch (e) {
+      result.style.color = 'var(--red)';
+      result.textContent = '❌ Ошибка запроса';
+    }
+
+    btn.disabled = false;
   }
 
   // ── Init ──────────────────────────────────────────────────────

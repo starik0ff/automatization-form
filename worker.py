@@ -4,6 +4,10 @@ import time
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+from email_reader import fetch_confirmation_code
+
+# Ждать код подтверждения из письма (секунды)
+EMAIL_CODE_TIMEOUT = 90
 
 FORM_URL = "https://www.facebook.com/help/contact/1758255661104383"
 
@@ -258,18 +262,75 @@ class BotWorker:
 
         time.sleep(random.uniform(1.0, 2.0))
 
-        # 14. Submit
+        # 14. Submit (первая кнопка)
         try:
             btn = page.locator(
                 "button[type='submit'], input[type='submit'], button:has-text('Submit')"
             ).first
             btn.scroll_into_view_if_needed()
             btn.click(timeout=5000)
-            time.sleep(random.uniform(2.0, 4.0))
-            return True
+            time.sleep(random.uniform(2.0, 3.5))
         except Exception as e:
             log.append(f"  ❌ Submit: {str(e)[:80]}")
             return False
+
+        # 15. Ждём код подтверждения на email (если IMAP настроен)
+        imap_user = s.get("imap_user", "").strip()
+        imap_pass = s.get("imap_pass", "").strip()
+
+        if imap_user and imap_pass:
+            log.append(f"  📬 Ожидаю код подтверждения на {imap_user}...")
+
+            try:
+                code = fetch_confirmation_code(
+                    imap_user=imap_user,
+                    imap_pass=imap_pass,
+                    timeout=EMAIL_CODE_TIMEOUT,
+                )
+            except RuntimeError as e:
+                log.append(f"  ⚠️ IMAP ошибка: {str(e)[:100]}")
+                code = None
+
+            if code:
+                log.append(f"  ✉️ Код получен: {code}")
+
+                # Ищем поле для ввода кода
+                code_filled = False
+                for sel in [
+                    "input[name='confirmation_code']",
+                    "input[name='code']",
+                    "input[placeholder*='code']",
+                    "input[placeholder*='код']",
+                    "input[aria-label*='code']",
+                    "input[maxlength='6']",
+                ]:
+                    try:
+                        el = page.locator(sel).first
+                        if el.count() > 0 and el.is_visible(timeout=2000):
+                            el.scroll_into_view_if_needed()
+                            el.fill("")
+                            el.type(code, delay=random.randint(80, 150))
+                            time.sleep(random.uniform(0.5, 1.0))
+
+                            # Финальный submit после кода
+                            self._click_any(page, [
+                                "button[type='submit']",
+                                "button:has-text('Submit')",
+                                "button:has-text('Confirm')",
+                                "button:has-text('Continue')",
+                            ])
+                            time.sleep(random.uniform(2.0, 3.5))
+                            code_filled = True
+                            break
+                    except Exception:
+                        continue
+
+                if not code_filled:
+                    log.append("  ⚠️ Поле для кода не найдено — возможно форма принята без кода")
+            else:
+                log.append(f"  ⚠️ Код не пришёл за {EMAIL_CODE_TIMEOUT}с — продолжаю без него")
+
+        return True
 
     # ── helpers ──────────────────────────────────────────────────
     def _fill(self, page, selectors: list[str], value: str):

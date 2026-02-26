@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from worker import BotWorker
+from email_reader import test_imap_connection
 
 app = FastAPI(title="FB Form Bot")
 templates = Jinja2Templates(directory="templates")
@@ -32,6 +33,13 @@ class LinksPayload(BaseModel):
     work_desc:    str
     inf_desc:     str
     signature:    str
+    imap_user:    str = ""
+    imap_pass:    str = ""
+
+
+class ImapTestPayload(BaseModel):
+    imap_user: str
+    imap_pass: str
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -119,6 +127,8 @@ async def start_bot(payload: LinksPayload):
         "work_description":  payload.work_desc,
         "infringement_desc": payload.inf_desc,
         "signature":         payload.signature,
+        "imap_user":         payload.imap_user,
+        "imap_pass":         payload.imap_pass,
     }
 
     batches = -(-len(post_urls) // 30)
@@ -181,3 +191,9 @@ async def reset():
 @app.get("/api/session-exists")
 async def session_exists():
     return {"exists": Path("cookies/session.json").exists()}
+
+
+@app.post("/api/test-imap")
+async def test_imap(payload: ImapTestPayload):
+    ok, msg = test_imap_connection(payload.imap_user, payload.imap_pass)
+    return {"ok": ok, "message": msg}
