@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ReportCRM</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b0d14;
+      --surface:   #13151f;
+      --surface2:  #1a1d2a;
+      --border:    #242736;
+      --border2:   #2e3148;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --muted2:    #94a3b8;
+      --blue:      #4f8ef7;
+      --blue-dim:  #1e3a6e;
+      --green:     #34d399;
+      --green-dim: #052e16;
+      --red:       #f87171;
+      --red-dim:   #2d1515;
+      --yellow:    #fbbf24;
+      --yellow-dim:#1c1305;
+      --sidebar-w: 220px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ════════════════════════════════════════
+       SIDEBAR
+    ════════════════════════════════════════ */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      height: 100vh;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .sidebar-logo {
+      padding: 20px 16px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-logo .logo-mark {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--blue), #0a5bc4);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+    }
+    .logo-text { font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.1; }
+    .logo-sub  { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+    .sidebar-section {
+      padding: 14px 10px 4px;
+    }
+    .sidebar-section-title {
+      font-size: 10px; font-weight: 700;
+      color: var(--muted); text-transform: uppercase;
+      letter-spacing: .07em;
+      padding: 0 6px; margin-bottom: 4px;
+    }
+
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: 8px;
+      cursor: pointer; font-size: 13px; color: var(--muted2);
+      transition: background .15s, color .15s;
+      user-select: none; position: relative;
+      text-decoration: none;
+    }
+    .nav-item:hover { background: var(--surface2); color: var(--text); }
+    .nav-item.active {
+      background: #1e3a6e33;
+      color: var(--blue);
+      font-weight: 600;
+    }
+    .nav-item.active::before {
+      content: '';
+      position: absolute; left: 0; top: 4px; bottom: 4px;
+      width: 3px; background: var(--blue); border-radius: 2px;
+    }
+    .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+    .nav-badge {
+      margin-left: auto; font-size: 10px; font-weight: 700;
+      background: var(--blue-dim); color: var(--blue);
+      border-radius: 4px; padding: 1px 6px;
+    }
+    .nav-soon {
+      margin-left: auto; font-size: 9px; font-weight: 600;
+      background: var(--surface2); color: var(--muted);
+      border-radius: 4px; padding: 1px 6px;
+      border: 1px solid var(--border2);
+    }
+    .nav-item.disabled { opacity: .45; cursor: default; pointer-events: none; }
+
+    .sidebar-bottom {
+      margin-top: auto;
+      padding: 12px 10px;
+      border-top: 1px solid var(--border);
+    }
+    .session-pill {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 8px;
+      background: var(--surface2); border: 1px solid var(--border2);
+      font-size: 12px; color: var(--muted2);
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot.red   { background: var(--red); }
+
+    /* ════════════════════════════════════════
+       MAIN AREA
+    ════════════════════════════════════════ */
+    .main {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      padding: 14px 28px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px;
+      background: var(--surface);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .topbar-title { font-size: 16px; font-weight: 700; }
+    .topbar-sub   { font-size: 12px; color: var(--muted); margin-top: 1px; }
+    .topbar-actions { margin-left: auto; display: flex; gap: 8px; }
+
+    .content { padding: 24px 28px; flex: 1; }
+
+    /* ════════════════════════════════════════
+       VIEWS
+    ════════════════════════════════════════ */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ════════════════════════════════════════
+       STAT CARDS
+    ════════════════════════════════════════ */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      top: 0; right: 0;
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      opacity: .06;
+      transform: translate(20px, -20px);
+    }
+    .stat-card.blue::after  { background: var(--blue); }
+    .stat-card.green::after { background: var(--green); }
+    .stat-card.red::after   { background: var(--red); }
+    .stat-card.yellow::after{ background: var(--yellow); }
+
+    .stat-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+    .stat-value { font-size: 32px; font-weight: 800; line-height: 1; }
+    .stat-card.blue   .stat-value { color: var(--blue); }
+    .stat-card.green  .stat-value { color: var(--green); }
+    .stat-card.red    .stat-value { color: var(--red); }
+    .stat-card.yellow .stat-value { color: var(--yellow); }
+    .stat-sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+    /* ════════════════════════════════════════
+       GRID LAYOUT
+    ════════════════════════════════════════ */
+    .row { display: grid; gap: 16px; margin-bottom: 16px; }
+    .row-2 { grid-template-columns: 1fr 1fr; }
+    .row-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .row-62 { grid-template-columns: 1.5fr 1fr; }
+    .row-26 { grid-template-columns: 1fr 1.5fr; }
+
+    /* ════════════════════════════════════════
+       PANELS
+    ════════════════════════════════════════ */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .panel-title {
+      font-size: 12px; font-weight: 700;
+      color: var(--muted); text-transform: uppercase;
+      letter-spacing: .07em; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .panel-title-right { margin-left: auto; }
+
+    /* ════════════════════════════════════════
+       SESSIONS TABLE
+    ════════════════════════════════════════ */
+    .sessions-table { width: 100%; border-collapse: collapse; }
+    .sessions-table th {
+      text-align: left; font-size: 11px; font-weight: 600;
+      color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
+      padding: 0 10px 10px; border-bottom: 1px solid var(--border);
+    }
+    .sessions-table td {
+      padding: 10px 10px; font-size: 12.5px; color: var(--muted2);
+      border-bottom: 1px solid var(--border);
+    }
+    .sessions-table tr:last-child td { border-bottom: none; }
+    .sessions-table tr:hover td { background: var(--surface2); }
+    .badge-ok  { display: inline-block; background: var(--green-dim); color: var(--green); border-radius: 5px; padding: 1px 8px; font-size: 11px; font-weight: 700; }
+    .badge-err { display: inline-block; background: var(--red-dim);   color: var(--red);   border-radius: 5px; padding: 1px 8px; font-size: 11px; font-weight: 700; }
+    .empty-state { text-align: center; padding: 30px; color: var(--muted); font-size: 13px; }
+
+    /* ════════════════════════════════════════
+       LIVE LOG
+    ════════════════════════════════════════ */
+    .log-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      height: 200px;
+      overflow-y: auto;
+      font-size: 12px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      line-height: 1.7;
+      color: var(--muted2);
+    }
+    .log-ok   { color: var(--green); }
+    .log-err  { color: var(--red); }
+    .log-warn { color: var(--yellow); }
+    .log-info { color: var(--blue); }
+
+    /* ════════════════════════════════════════
+       PROGRESS BAR
+    ════════════════════════════════════════ */
+    .progress-wrap { background: var(--bg); border-radius: 6px; height: 6px; overflow: hidden; margin-bottom: 14px; }
+    .progress-bar  { height: 100%; background: linear-gradient(90deg, var(--blue), #60a5fa); border-radius: 6px; transition: width .4s ease; width: 0%; }
+
+    /* ════════════════════════════════════════
+       STATE BANNER
+    ════════════════════════════════════════ */
+    .state-banner {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 14px; border-radius: 9px;
+      font-size: 13px; font-weight: 600; margin-bottom: 14px;
+    }
+    .state-banner.idle    { background: var(--surface2); color: var(--muted); }
+    .state-banner.running { background: #0c1a3a; color: var(--blue); border: 1px solid var(--blue-dim); }
+    .state-banner.done    { background: var(--green-dim); color: var(--green); border: 1px solid #166534; }
+    .state-banner.error   { background: var(--red-dim);   color: var(--red);   border: 1px solid #7f1d1d; }
+    .state-banner.stopped { background: var(--yellow-dim);color: var(--yellow);border: 1px solid #713f12; }
+
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid var(--blue-dim); border-top-color: var(--blue);
+      border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ════════════════════════════════════════
+       MINI STATS ROW
+    ════════════════════════════════════════ */
+    .mini-stats { display: flex; gap: 10px; margin-bottom: 14px; }
+    .mini-stat  {
+      flex: 1; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 12px; text-align: center;
+    }
+    .mini-stat .val { font-size: 22px; font-weight: 800; line-height: 1; }
+    .mini-stat .lbl { font-size: 10px; color: var(--muted); margin-top: 3px; text-transform: uppercase; }
+    .mini-stat.blue   .val { color: var(--blue); }
+    .mini-stat.green  .val { color: var(--green); }
+    .mini-stat.red    .val { color: var(--red); }
+    .mini-stat.yellow .val { color: var(--yellow); }
+
+    /* ════════════════════════════════════════
+       FORM ELEMENTS
+    ════════════════════════════════════════ */
+    .form-grid   { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-field  { display: flex; flex-direction: column; gap: 5px; }
+    .form-label  { font-size: 11px; color: var(--muted2); font-weight: 600; }
+    .form-label.req::after { content: ' *'; color: var(--red); }
+
+    input[type="text"], input[type="url"], input[type="email"], textarea, select {
+      width: 100%;
+      background: var(--bg); border: 1px solid var(--border2);
+      border-radius: 8px; color: var(--text);
+      font-size: 13px; padding: 8px 11px;
+      outline: none; transition: border-color .15s;
+      font-family: inherit;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--blue); }
+    select option { background: var(--surface); }
+    textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
+    textarea.tall { min-height: 116px; }
+
+    .checkbox-group { display: flex; gap: 7px; flex-wrap: wrap; }
+    .cb-option {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--bg); border: 1px solid var(--border2);
+      border-radius: 7px; padding: 6px 12px;
+      cursor: pointer; font-size: 12px; color: var(--muted2);
+      transition: all .15s; user-select: none;
+    }
+    .cb-option:hover { border-color: var(--blue); color: var(--text); }
+    .cb-option input[type="checkbox"] { display: none; }
+    .cb-option.checked { border-color: var(--blue); background: #1877f215; color: var(--blue); font-weight: 700; }
+
+    .upload-area {
+      border: 1.5px dashed var(--border2); border-radius: 8px;
+      padding: 12px; text-align: center; cursor: pointer;
+      transition: all .15s; position: relative;
+    }
+    .upload-area:hover { border-color: var(--blue); background: #1877f208; }
+    .upload-area input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .upload-area p { font-size: 12px; color: var(--muted); }
+    .upload-area strong { color: var(--blue); }
+
+    .url-badge {
+      display: inline-block; background: #1877f220; color: var(--blue);
+      border-radius: 6px; padding: 1px 8px; font-size: 11px; font-weight: 700; margin-left: 7px;
+    }
+    .batch-badge {
+      display: inline-block; background: var(--yellow-dim); color: var(--yellow);
+      border: 1px solid #713f12;
+      border-radius: 6px; padding: 1px 8px; font-size: 11px; font-weight: 700; margin-left: 5px;
+    }
+
+    .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+    /* ════════════════════════════════════════
+       BUTTONS
+    ════════════════════════════════════════ */
+    .btn {
+      cursor: pointer; border: none; border-radius: 8px;
+      font-size: 13px; font-weight: 600; padding: 9px 18px;
+      transition: opacity .15s, transform .1s; font-family: inherit;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .35; cursor: not-allowed; }
+    .btn-primary { background: linear-gradient(135deg, var(--blue), #0a5bc4); color: #fff; }
+    .btn-danger  { background: var(--red-dim); color: #fca5a5; border: 1px solid #7f1d1d; }
+    .btn-ghost   { background: var(--surface2); color: var(--muted2); border: 1px solid var(--border2); }
+    .btn-sm      { font-size: 12px; padding: 7px 13px; }
+
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+    /* ════════════════════════════════════════
+       MINI CHART (sparkline)
+    ════════════════════════════════════════ */
+    .sparkline { height: 40px; }
+
+    /* ════════════════════════════════════════
+       SERVICE BADGE IN SIDEBAR
+    ════════════════════════════════════════ */
+    .service-chip {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 10px; border-radius: 8px;
+      font-size: 12px; color: var(--muted2);
+      margin-bottom: 2px;
+    }
+    .service-chip .chip-icon {
+      width: 22px; height: 22px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; flex-shrink: 0;
+    }
+
+    /* ════════════════════════════════════════
+       RESPONSIVE
+    ════════════════════════════════════════ */
+    @media (max-width: 900px) {
+      .stat-grid { grid-template-columns: 1fr 1fr; }
+      .row-62, .row-26, .row-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════
+     SIDEBAR
+══════════════════════════════════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">
+      <div class="logo-icon">⚡</div>
+      <div>
+        <div class="logo-text">ReportCRM</div>
+        <div class="logo-sub">Automation Panel</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Главное</div>
+    <div class="nav-item active" onclick="navigate('dashboard')" id="nav-dashboard">
+      <span class="nav-icon">📊</span> Dashboard
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Сервисы</div>
+
+    <!-- Facebook -->
+    <div class="nav-item" onclick="navigate('fb-form')" id="nav-fb-form">
+      <span class="nav-icon">📘</span> FB Copyright
+    </div>
+
+    <!-- Coming soon -->
+    <div class="nav-item disabled">
+      <span class="nav-icon">📷</span> Instagram
+      <span class="nav-soon">Soon</span>
+    </div>
+    <div class="nav-item disabled">
+      <span class="nav-icon">🐦</span> Twitter / X
+      <span class="nav-soon">Soon</span>
+    </div>
+    <div class="nav-item disabled">
+      <span class="nav-icon">▶️</span> YouTube
+      <span class="nav-soon">Soon</span>
+    </div>
+    <div class="nav-item disabled">
+      <span class="nav-icon">🎵</span> TikTok
+      <span class="nav-soon">Soon</span>
+    </div>
+  </div>
+
+  <div class="sidebar-bottom">
+    <div class="session-pill">
+      <div class="dot red" id="sidebarDot"></div>
+      <span id="sidebarSession">Сессия не найдена</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ══════════════════════════════════════════════════
+     MAIN
+══════════════════════════════════════════════════ -->
+<div class="main">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div>
+      <div class="topbar-title" id="topbarTitle">Dashboard</div>
+      <div class="topbar-sub" id="topbarSub">Общая статистика по всем сервисам</div>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost btn-sm" onclick="refreshStats()">↻ Обновить</button>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ═══════════════════════════════════
+         VIEW: DASHBOARD
+    ═══════════════════════════════════ -->
+    <div class="view active" id="view-dashboard">
+
+      <!-- Stat cards -->
+      <div class="stat-grid">
+        <div class="stat-card blue">
+          <div class="stat-label">Всего ссылок</div>
+          <div class="stat-value" id="d-total">0</div>
+          <div class="stat-sub">за всё время</div>
+        </div>
+        <div class="stat-card green">
+          <div class="stat-label">Успешно отправлено</div>
+          <div class="stat-value" id="d-success">0</div>
+          <div class="stat-sub">форм принято</div>
+        </div>
+        <div class="stat-card red">
+          <div class="stat-label">Ошибки</div>
+          <div class="stat-value" id="d-failed">0</div>
+          <div class="stat-sub">не отправлено</div>
+        </div>
+        <div class="stat-card yellow">
+          <div class="stat-label">Батчей отправлено</div>
+          <div class="stat-value" id="d-batches">0</div>
+          <div class="stat-sub">форм на Facebook</div>
+        </div>
+      </div>
+
+      <div class="row row-62">
+        <!-- Sessions history -->
+        <div class="panel">
+          <div class="panel-title">
+            📋 История сессий — Facebook Copyright
+            <span class="panel-title-right" style="font-size:11px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">последние 20</span>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="sessions-table" id="sessionsTable">
+              <thead>
+                <tr>
+                  <th>Дата</th>
+                  <th>Ссылок</th>
+                  <th>Успешно</th>
+                  <th>Ошибок</th>
+                  <th>Батчей</th>
+                  <th>Статус</th>
+                </tr>
+              </thead>
+              <tbody id="sessionsTbody">
+                <tr><td colspan="6"><div class="empty-state">Нет данных — запусти первую сессию</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Service breakdown -->
+        <div class="panel">
+          <div class="panel-title">🌐 Сервисы</div>
+
+          <div style="margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:8px;height:8px;border-radius:50%;background:var(--blue)"></div>
+                <span style="font-size:13px">Facebook Copyright</span>
+              </div>
+              <span id="fb-pct" style="font-size:12px;color:var(--muted)">—</span>
+            </div>
+            <div style="background:var(--bg);border-radius:4px;height:6px;overflow:hidden">
+              <div id="fb-bar" style="height:100%;background:var(--blue);border-radius:4px;width:0%;transition:width .5s"></div>
+            </div>
+          </div>
+
+          <div style="opacity:.4;margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:8px;height:8px;border-radius:50%;background:var(--muted)"></div>
+                <span style="font-size:13px;color:var(--muted)">Instagram</span>
+              </div>
+              <span style="font-size:11px;color:var(--muted);background:var(--surface2);border-radius:4px;padding:1px 7px;border:1px solid var(--border2)">Soon</span>
+            </div>
+          </div>
+
+          <div style="opacity:.4;margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:8px;height:8px;border-radius:50%;background:var(--muted)"></div>
+                <span style="font-size:13px;color:var(--muted)">Twitter / X</span>
+              </div>
+              <span style="font-size:11px;color:var(--muted);background:var(--surface2);border-radius:4px;padding:1px 7px;border:1px solid var(--border2)">Soon</span>
+            </div>
+          </div>
+
+          <div style="opacity:.4">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:8px;height:8px;border-radius:50%;background:var(--muted)"></div>
+                <span style="font-size:13px;color:var(--muted)">YouTube</span>
+              </div>
+              <span style="font-size:11px;color:var(--muted);background:var(--surface2);border-radius:4px;padding:1px 7px;border:1px solid var(--border2)">Soon</span>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <button class="btn btn-primary" style="width:100%" onclick="navigate('fb-form')">
+            ▶ Запустить Facebook Bot
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════
+         VIEW: FB FORM
+    ═══════════════════════════════════ -->
+    <div class="view" id="view-fb-form">
+      <div class="row row-62">
+
+        <!-- Left: form -->
+        <div>
+          <!-- Static data -->
+          <div class="panel" style="margin-bottom:16px">
+            <div class="panel-title">👤 Статичные данные</div>
+            <div class="form-grid" style="margin-bottom:12px">
+              <div class="form-field">
+                <label class="form-label req">Полное имя</label>
+                <input type="text" id="sFullName" placeholder="John Doe"/>
+              </div>
+              <div class="form-field">
+                <label class="form-label req">Имя правообладателя</label>
+                <input type="text" id="sRightsOwner" placeholder="John Doe / Company"/>
+              </div>
+              <div class="form-field">
+                <label class="form-label req">Email</label>
+                <input type="email" id="sEmail" placeholder="your@email.com"/>
+              </div>
+              <div class="form-field">
+                <label class="form-label req">Страна</label>
+                <select id="sCountry">
+                  <option value="">— выбери —</option>
+                  <option>United States</option><option>United Kingdom</option>
+                  <option>Germany</option><option>France</option>
+                  <option>Russia</option><option>Ukraine</option>
+                  <option>Kazakhstan</option><option>Poland</option>
+                  <option>Canada</option><option>Australia</option>
+                  <option>Netherlands</option><option>Spain</option>
+                  <option>Italy</option><option>Sweden</option>
+                  <option>Japan</option><option>South Korea</option>
+                  <option>Brazil</option><option>India</option>
+                  <option>China</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label class="form-label req">Тип произведения</label>
+                <div class="checkbox-group" id="sWorkType">
+                  <label class="cb-option"><input type="checkbox" value="Photo"/> Photo</label>
+                  <label class="cb-option"><input type="checkbox" value="Video"/> Video</label>
+                  <label class="cb-option"><input type="checkbox" value="Text"/> Text</label>
+                  <label class="cb-option"><input type="checkbox" value="Other"/> Other</label>
+                </div>
+              </div>
+              <div class="form-field">
+                <label class="form-label req">Электронная подпись</label>
+                <input type="text" id="sSignature" placeholder="John Doe"/>
+              </div>
+            </div>
+            <div class="form-grid">
+              <div class="form-field">
+                <label class="form-label req">Описание произведения</label>
+                <textarea id="sWorkDesc" placeholder="Оригинальное авторское произведение..."></textarea>
+              </div>
+              <div class="form-field">
+                <label class="form-label req">Описание нарушения</label>
+                <textarea id="sInfDesc" placeholder="Как именно нарушены авторские права..."></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dynamic links -->
+          <div class="panel">
+            <div class="panel-title">🔗 Ссылки</div>
+
+            <div class="form-field" style="margin-bottom:12px">
+              <label class="form-label req">Ссылка на оригинал (авторское произведение)</label>
+              <input type="url" id="accountUrl" placeholder="https://www.facebook.com/photo?fbid=..."/>
+            </div>
+
+            <div class="form-field" style="margin-bottom:10px">
+              <div style="display:flex;align-items:center;margin-bottom:5px">
+                <label class="form-label req" style="margin:0">Ссылки на нарушающие посты</label>
+                <span id="urlCount" class="url-badge" style="display:none">0</span>
+                <span id="batchCount" class="batch-badge" style="display:none">0</span>
+              </div>
+              <textarea class="tall" id="postUrls"
+                placeholder="По одной ссылке на строку. Форма принимает до 30 за раз — бот разобьёт автоматически.&#10;https://www.facebook.com/post/111&#10;https://www.facebook.com/post/222"></textarea>
+            </div>
+
+            <div class="upload-area" style="margin-bottom:14px">
+              <input type="file" id="csvFile" accept=".csv,.txt"/>
+              <p>📂 <strong>Загрузи CSV / TXT</strong> со ссылками</p>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="actions">
+              <button class="btn btn-primary" id="startBtn" onclick="startBot()">▶ Запустить</button>
+              <button class="btn btn-danger btn-sm" id="stopBtn" onclick="stopBot()" disabled>⛔ Стоп</button>
+              <button class="btn btn-ghost btn-sm" onclick="clearLinks()">🗑 Очистить</button>
+              <button class="btn btn-ghost btn-sm" onclick="saveStatic()">💾 Сохранить</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: progress -->
+        <div>
+          <div class="panel" style="margin-bottom:16px">
+            <div class="panel-title">📊 Текущая сессия</div>
+
+            <div id="stateBanner" class="state-banner idle">
+              <span>⚪</span> Ожидание запуска
+            </div>
+
+            <div class="mini-stats">
+              <div class="mini-stat blue">
+                <div class="val" id="statTotal">0</div>
+                <div class="lbl">Постов</div>
+              </div>
+              <div class="mini-stat yellow">
+                <div class="val" id="statBatches">0</div>
+                <div class="lbl">Батчей</div>
+              </div>
+              <div class="mini-stat green">
+                <div class="val" id="statDone">0</div>
+                <div class="lbl">Успешно</div>
+              </div>
+              <div class="mini-stat red">
+                <div class="val" id="statFailed">0</div>
+                <div class="lbl">Ошибок</div>
+              </div>
+            </div>
+
+            <div class="progress-wrap">
+              <div class="progress-bar" id="progressBar"></div>
+            </div>
+
+            <div class="log-box" id="logBox">
+              <span style="color:var(--muted)">— лог появится здесь —</span>
+            </div>
+          </div>
+
+          <!-- All-time stats for Facebook -->
+          <div class="panel">
+            <div class="panel-title">📈 Facebook — итого</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+                <div style="font-size:22px;font-weight:800;color:var(--blue)" id="fb-total-all">0</div>
+                <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-top:3px">Ссылок всего</div>
+              </div>
+              <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+                <div style="font-size:22px;font-weight:800;color:var(--green)" id="fb-success-all">0</div>
+                <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-top:3px">Успешно</div>
+              </div>
+              <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+                <div style="font-size:22px;font-weight:800;color:var(--red)" id="fb-failed-all">0</div>
+                <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-top:3px">Ошибок</div>
+              </div>
+              <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+                <div style="font-size:22px;font-weight:800;color:var(--yellow)" id="fb-batches-all">0</div>
+                <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-top:3px">Батчей</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+
+<script>
+  // ── Navigation ────────────────────────────────────────────────
+  const VIEWS = {
+    'dashboard': { title: 'Dashboard',           sub: 'Общая статистика по всем сервисам' },
+    'fb-form':   { title: 'Facebook Copyright',  sub: 'Форма: facebook.com/help/contact/1758255661104383' },
+  };
+
+  function navigate(id) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('view-' + id)?.classList.add('active');
+    document.getElementById('nav-' + id)?.classList.add('active');
+    const info = VIEWS[id] || {};
+    document.getElementById('topbarTitle').textContent = info.title || id;
+    document.getElementById('topbarSub').textContent   = info.sub   || '';
+  }
+
+  // ── Session ───────────────────────────────────────────────────
+  async function checkSession() {
+    try {
+      const r = await fetch('/api/session-exists');
+      const d = await r.json();
+      const dot  = document.getElementById('sidebarDot');
+      const text = document.getElementById('sidebarSession');
+      if (d.exists) {
+        dot.className  = 'dot green';
+        text.textContent = 'Сессия активна';
+      } else {
+        dot.className  = 'dot red';
+        text.textContent = 'Сессия не найдена';
+      }
+    } catch {}
+  }
+
+  // ── Stats ─────────────────────────────────────────────────────
+  async function refreshStats() {
+    try {
+      const r = await fetch('/api/stats');
+      const d = await r.json();
+      const fb = d.services?.facebook || {};
+
+      const total   = fb.total_sent    || 0;
+      const success = fb.total_success || 0;
+      const failed  = fb.total_failed  || 0;
+      const batches = fb.total_batches || 0;
+
+      // Dashboard cards
+      document.getElementById('d-total').textContent   = total;
+      document.getElementById('d-success').textContent = success;
+      document.getElementById('d-failed').textContent  = failed;
+      document.getElementById('d-batches').textContent = batches;
+
+      // Service bar
+      const pct = total > 0 ? Math.round(success / total * 100) : 0;
+      document.getElementById('fb-bar').style.width = pct + '%';
+      document.getElementById('fb-pct').textContent = total > 0 ? `${success}/${total} (${pct}%)` : '—';
+
+      // FB form panel totals
+      document.getElementById('fb-total-all').textContent   = total;
+      document.getElementById('fb-success-all').textContent = success;
+      document.getElementById('fb-failed-all').textContent  = failed;
+      document.getElementById('fb-batches-all').textContent = batches;
+
+      // Sessions table
+      const tbody = document.getElementById('sessionsTbody');
+      const sessions = (fb.sessions || []).slice().reverse();
+      if (sessions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">Нет данных — запусти первую сессию</div></td></tr>';
+      } else {
+        tbody.innerHTML = sessions.map(s => `
+          <tr>
+            <td>${s.date}</td>
+            <td style="color:var(--blue);font-weight:700">${s.total}</td>
+            <td><span class="badge-ok">${s.success}</span></td>
+            <td>${s.failed > 0 ? `<span class="badge-err">${s.failed}</span>` : '<span style="color:var(--muted)">0</span>'}</td>
+            <td style="color:var(--yellow)">${s.batches}</td>
+            <td>${s.failed === 0 ? '<span class="badge-ok">OK</span>' : s.success === 0 ? '<span class="badge-err">Fail</span>' : '<span class="badge-ok">Partial</span>'}</td>
+          </tr>`).join('');
+      }
+    } catch {}
+  }
+
+  // ── CSV ───────────────────────────────────────────────────────
+  document.getElementById('csvFile').addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    const r = await fetch('/api/upload-csv', { method: 'POST', body: form });
+    const d = await r.json();
+    const ta = document.getElementById('postUrls');
+    const ex = ta.value.trim();
+    ta.value = (ex ? ex + '\n' : '') + d.urls.join('\n');
+    updateUrlCount();
+    toast(`✅ Загружено ${d.count} ссылок`, 'ok');
+    e.target.value = '';
+  });
+
+  document.getElementById('postUrls').addEventListener('input', updateUrlCount);
+
+  function updateUrlCount() {
+    const urls    = getPostUrls();
+    const batches = Math.ceil(urls.length / 30) || 0;
+    const uc = document.getElementById('urlCount');
+    const bc = document.getElementById('batchCount');
+    if (urls.length > 0) {
+      uc.textContent = `${urls.length} ссылок`;
+      uc.style.display = 'inline-block';
+      bc.textContent = `${batches} батч${batches === 1 ? '' : 'ей'}`;
+      bc.style.display = 'inline-block';
+      document.getElementById('statBatches').textContent = batches;
+    } else {
+      uc.style.display = 'none';
+      bc.style.display = 'none';
+    }
+  }
+
+  function getPostUrls() {
+    return document.getElementById('postUrls').value
+      .split('\n').map(s => s.trim()).filter(s => s.startsWith('http'));
+  }
+
+  // ── Checkboxes ────────────────────────────────────────────────
+  function getWorkTypes() {
+    return Array.from(document.querySelectorAll('#sWorkType input:checked')).map(cb => cb.value);
+  }
+  function setWorkTypes(values) {
+    document.querySelectorAll('#sWorkType .cb-option').forEach(lbl => {
+      const cb = lbl.querySelector('input');
+      const on = values.includes(cb.value);
+      cb.checked = on;
+      lbl.classList.toggle('checked', on);
+    });
+  }
+  document.querySelectorAll('#sWorkType .cb-option').forEach(lbl => {
+    lbl.addEventListener('click', () => {
+      const cb = lbl.querySelector('input');
+      cb.checked = !cb.checked;
+      lbl.classList.toggle('checked', cb.checked);
+    });
+  });
+
+  // ── LocalStorage ──────────────────────────────────────────────
+  const LS_KEYS = ['sFullName','sRightsOwner','sEmail','sCountry','sSignature','sWorkDesc','sInfDesc','accountUrl'];
+
+  function saveStatic() {
+    LS_KEYS.forEach(k => localStorage.setItem(k, document.getElementById(k).value));
+    localStorage.setItem('sWorkType', JSON.stringify(getWorkTypes()));
+    toast('💾 Данные сохранены', 'ok');
+  }
+
+  function loadStatic() {
+    LS_KEYS.forEach(k => {
+      const v = localStorage.getItem(k);
+      if (v) document.getElementById(k).value = v;
+    });
+    const wt = localStorage.getItem('sWorkType');
+    if (wt) { try { setWorkTypes(JSON.parse(wt)); } catch {} }
+    updateUrlCount();
+  }
+
+  // ── Validate ──────────────────────────────────────────────────
+  function validate() {
+    const fields = {
+      sFullName: 'Полное имя', sRightsOwner: 'Правообладатель',
+      sEmail: 'Email', sCountry: 'Страна',
+      sSignature: 'Подпись', sWorkDesc: 'Описание произведения',
+      sInfDesc: 'Описание нарушения', accountUrl: 'Ссылка на оригинал',
+    };
+    for (const [id, lbl] of Object.entries(fields)) {
+      if (!document.getElementById(id).value.trim()) {
+        toast(`⚠️ Заполни: ${lbl}`, 'warn');
+        document.getElementById(id).focus();
+        return false;
+      }
+    }
+    if (!getWorkTypes().length) { toast('⚠️ Выбери тип произведения', 'warn'); return false; }
+    if (!getPostUrls().length)  { toast('⚠️ Добавь ссылки на посты', 'warn'); return false; }
+    return true;
+  }
+
+  // ── Start / Stop ──────────────────────────────────────────────
+  async function startBot() {
+    if (!validate()) return;
+
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('stopBtn').disabled  = false;
+
+    const r = await fetch('/api/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        account_url:  document.getElementById('accountUrl').value.trim(),
+        post_urls:    getPostUrls(),
+        full_name:    document.getElementById('sFullName').value.trim(),
+        email:        document.getElementById('sEmail').value.trim(),
+        country:      document.getElementById('sCountry').value,
+        work_type:    getWorkTypes().join(', '),
+        rights_owner: document.getElementById('sRightsOwner').value.trim(),
+        work_desc:    document.getElementById('sWorkDesc').value.trim(),
+        inf_desc:     document.getElementById('sInfDesc').value.trim(),
+        signature:    document.getElementById('sSignature').value.trim(),
+      }),
+    });
+    const d = await r.json();
+
+    if (d.error) {
+      toast('❌ ' + d.error, 'err');
+      document.getElementById('startBtn').disabled = false;
+      document.getElementById('stopBtn').disabled  = true;
+      return;
+    }
+    saveStatic();
+    startPolling();
+  }
+
+  async function stopBot() {
+    await fetch('/api/stop', { method: 'POST' });
+    document.getElementById('stopBtn').disabled = true;
+  }
+
+  function clearLinks() {
+    if (pollInterval) return;
+    document.getElementById('postUrls').value = '';
+    updateUrlCount();
+  }
+
+  // ── Polling ───────────────────────────────────────────────────
+  let pollInterval   = null;
+  let lastLogLength  = 0;
+
+  function startPolling() {
+    if (pollInterval) clearInterval(pollInterval);
+    lastLogLength = 0;
+    pollInterval  = setInterval(fetchStatus, 1500);
+    fetchStatus();
+  }
+
+  async function fetchStatus() {
+    try {
+      const r = await fetch('/api/status');
+      const d = await r.json();
+      renderStatus(d);
+      if (['done', 'error', 'stopped'].includes(d.state)) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('stopBtn').disabled  = true;
+        setTimeout(refreshStats, 1000);
+      }
+    } catch {}
+  }
+
+  function renderStatus(d) {
+    document.getElementById('statTotal').textContent  = d.total;
+    document.getElementById('statDone').textContent   = d.done;
+    document.getElementById('statFailed').textContent = d.failed;
+
+    const pct = d.total > 0 ? Math.round((d.done + d.failed) / d.total * 100) : 0;
+    document.getElementById('progressBar').style.width = pct + '%';
+
+    const banner = document.getElementById('stateBanner');
+    const map = {
+      idle:    ['⚪', 'Ожидание запуска', 'idle'],
+      running: ['<div class="spinner"></div>', `Обработка... (${d.done + d.failed}/${d.total})`, 'running'],
+      done:    ['✅', `Готово! Успешно: ${d.done}, ошибок: ${d.failed}`, 'done'],
+      error:   ['❌', 'Ошибка — смотри лог', 'error'],
+      stopped: ['⛔', `Остановлено. Обработано: ${d.done + d.failed}/${d.total}`, 'stopped'],
+    };
+    const [icon, text, cls] = map[d.state] || map['idle'];
+    banner.className = `state-banner ${cls}`;
+    banner.innerHTML = `${icon} <span>${text}</span>`;
+
+    if (d.log && d.log.length > lastLogLength) {
+      const box = document.getElementById('logBox');
+      if (lastLogLength === 0) box.innerHTML = '';
+      d.log.slice(lastLogLength).forEach(line => {
+        const el = document.createElement('div');
+        el.className = lineClass(line);
+        el.textContent = line;
+        box.appendChild(el);
+      });
+      lastLogLength = d.log.length;
+      box.scrollTop = box.scrollHeight;
+    }
+  }
+
+  function lineClass(l) {
+    if (l.startsWith('✅')) return 'log-ok';
+    if (l.startsWith('❌') || l.startsWith('💥')) return 'log-err';
+    if (l.startsWith('⚠') || l.startsWith('⛔')) return 'log-warn';
+    return 'log-info';
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────
+  function toast(msg, type = 'ok') {
+    const colors = { ok: '#4f8ef7', warn: '#d97706', err: '#dc2626' };
+    const t = document.createElement('div');
+    t.style.cssText = `position:fixed;bottom:20px;right:20px;background:#1a1d2a;border:1px solid ${colors[type]||colors.ok};color:#e2e8f0;padding:10px 16px;border-radius:9px;font-size:13px;z-index:9999;max-width:300px;box-shadow:0 8px 24px #00000077`;
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3200);
+  }
+
+  // ── Init ──────────────────────────────────────────────────────
+  loadStatic();
+  checkSession();
+  refreshStats();
+  fetchStatus();
+  setInterval(checkSession, 10000);
+</script>
+</body>
+</html>
