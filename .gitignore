@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Сессия Facebook — не пушить!
+cookies/
+
+# Рабочие файлы
+status.json
+stats.json
+
+# Виртуальное окружение
+venv/
+.venv/
