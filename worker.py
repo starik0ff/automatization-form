@@ -6,26 +6,23 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 from email_reader import fetch_confirmation_code
 
-# Ждать код подтверждения из письма (секунды)
-EMAIL_CODE_TIMEOUT = 90
-
-FORM_URL = "https://www.facebook.com/help/contact/1758255661104383"
-
+FORM_URL        = "https://www.facebook.com/help/contact/1758255661104383"
 LINKS_PER_BATCH = 30
-DELAY_MIN = 8
-DELAY_MAX = 18
+DELAY_MIN       = 8
+DELAY_MAX       = 18
+EMAIL_CODE_TIMEOUT = 90
 
 
 class BotWorker:
-    def __init__(self, account_url: str, post_urls: list[str], static: dict,
+    def __init__(self, account_url: str, post_urls: list, static: dict,
                  status_file: Path, on_finish=None):
         self.account_url = account_url
-        self.post_urls = post_urls
-        self.static = static
+        self.post_urls   = post_urls
+        self.static      = static
         self.status_file = status_file
-        self.on_finish = on_finish
-        self._stop = False
-        self.batches = [
+        self.on_finish   = on_finish
+        self._stop       = False
+        self.batches     = [
             post_urls[i:i + LINKS_PER_BATCH]
             for i in range(0, len(post_urls), LINKS_PER_BATCH)
         ]
@@ -33,21 +30,22 @@ class BotWorker:
     def stop(self):
         self._stop = True
 
-    def _save(self, state: str, done: int, failed: int, log: list[str]):
+    def _save(self, state: str, done: int, failed: int, log: list):
         with open(self.status_file, "w") as f:
             json.dump({
-                "state": state,
-                "total": len(self.post_urls),
-                "done": done,
+                "state":  state,
+                "total":  len(self.post_urls),
+                "done":   done,
                 "failed": failed,
-                "log": log[-100:],
+                "log":    log[-100:],
             }, f, ensure_ascii=False)
 
     def run(self):
-        log = [f"Постов: {len(self.post_urls)}, батчей: {len(self.batches)} (по {LINKS_PER_BATCH})"]
-        done = failed = 0
+        log    = [f"Постов: {len(self.post_urls)}, батчей: {len(self.batches)} (по {LINKS_PER_BATCH})"]
+        done   = 0
+        failed = 0
 
-        session_path = Path("cookies/session.json")
+        session_path = Path(__file__).parent / "cookies" / "session.json"
         if not session_path.exists():
             log.append("⚠️  Сессия не найдена. Запусти save_session.py")
             self._save("error", done, failed, log)
@@ -59,7 +57,7 @@ class BotWorker:
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=False)
                 context = browser.new_context(
-                    storage_state=str(session_path),
+                    storage_state=str(session_path.resolve()),
                     user_agent=(
                         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                         "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -118,245 +116,144 @@ class BotWorker:
                 pass
 
     # ─────────────────────────────────────────────────────────────
-    def _submit_batch(self, page, batch: list[str], log: list[str]) -> bool:
+    def _submit_batch(self, page, batch: list, log: list) -> bool:
         s = self.static
 
         page.goto(FORM_URL, wait_until="domcontentloaded", timeout=30000)
         page.wait_for_load_state("networkidle", timeout=15000)
 
-        # 1. I am the rights owner
-        self._click_any(page, [
-            "label:has-text('I am the rights owner')",
-            "input[type='radio']:first-of-type",
-        ])
+        # ── 1. I am the rights owner ──────────────────────────────
+        # Радиокнопка скрыта (opacity:0), кликаем по лейблу
+        page.get_by_text("I am the rights owner.", exact=True).click()
         self._pause()
 
-        # 2. Full name
-        self._fill(page, [
-            "input[name='full_name']",
-            "input[placeholder*='full name']",
-            "input[placeholder*='name']",
-        ], s["full_name"])
+        # Ждём появления полей формы
+        page.wait_for_selector("input[aria-label='Your full name']", timeout=10000)
 
-        # 3. Email
-        self._fill(page, [
-            "input[name='email']",
-            "input[type='email']",
-            "input[placeholder*='email']",
-        ], s["email"])
+        # ── 2. Full name ──────────────────────────────────────────
+        page.get_by_label("Your full name").fill(s["full_name"])
+        self._pause(0.3, 0.6)
 
-        # 4. Confirm email
-        self._fill(page, [
-            "input[name='confirm_email']",
-            "input[placeholder*='onfirm']",
-        ], s["email"])
+        # ── 3. Email ──────────────────────────────────────────────
+        page.get_by_label("Email address", exact=False).fill(s["email"])
+        self._pause(0.3, 0.6)
 
-        self._pause()
+        # ── 4. Confirm email ──────────────────────────────────────
+        page.get_by_label("Confirm your email address").fill(s["email"])
+        self._pause(0.3, 0.6)
 
-        # 5. Country
-        try:
-            page.locator("select").first.select_option(label=s["country"])
-        except Exception:
-            pass
+        # ── 5. Country ────────────────────────────────────────────
+        page.get_by_label("Where are you asserting rights?").select_option(label=s["country"])
+        self._pause(0.3, 0.6)
 
-        # 6. Work type — может быть несколько через ", "
-        for wt in [w.strip() for w in s["work_type"].split(",") if w.strip()]:
-            self._click_any(page, [
-                f"label:has-text('{wt}')",
-                f"input[value='{wt.lower()}']",
-            ])
-            time.sleep(random.uniform(0.2, 0.5))
-        self._pause()
+        # ── 6. Work type (SELECT — берём первый выбранный тип) ───
+        # На форме это одиночный <select>, берём первое значение из списка
+        work_types = [w.strip() for w in s["work_type"].split(",") if w.strip()]
+        if work_types:
+            page.get_by_label("Which of these best describes the copyrighted work?").select_option(
+                label=work_types[0]
+            )
+        self._pause(0.3, 0.6)
 
-        # 7. Rights owner name
-        self._fill(page, [
-            "input[name='rights_owner']",
-            "input[placeholder*='rights owner']",
-            "input[placeholder*='organization']",
-            "input[placeholder*='Name of']",
-        ], s["rights_owner_name"])
+        # ── 7. Rights owner name ─────────────────────────────────
+        page.get_by_label("Name of the rights owner", exact=False).fill(s["rights_owner_name"])
+        self._pause(0.3, 0.6)
 
-        # 8. Link to copyrighted work (account / original)
-        self._fill(page, [
-            "input[name='original_url']",
-            "input[placeholder*='link to']",
-            "input[placeholder*='your website']",
-            "input[placeholder*='copyrighted']",
-        ], self.account_url)
+        # ── 8. Link to copyrighted work ───────────────────────────
+        page.get_by_label("Provide a link to the copyrighted work", exact=False).fill(self.account_url)
+        self._pause(0.3, 0.6)
 
-        # 9. Describe copyrighted work
-        self._fill(page, [
-            "textarea[name='work_description']",
-            "textarea:nth-of-type(1)",
-        ], s["work_description"])
+        # ── 9. Describe copyrighted work ─────────────────────────
+        page.get_by_label("Describe your copyrighted work", exact=False).fill(s["work_description"])
+        self._pause(0.5, 1.0)
 
-        self._pause()
+        # ── 10. Content type = Photo, video or post ───────────────
+        # Чекбокс скрыт (readonly), кликаем по лейблу
+        page.get_by_text("Photo, video or post", exact=True).click()
+        self._pause(0.5, 1.0)
 
-        # 10. Content type = Photo, video or post
-        self._click_any(page, [
-            "label:has-text('Photo, video or post')",
-            "label:has-text('Photo')",
-        ])
-        self._pause()
-
-        # 11. Post links (Link 1 … Link N)
+        # ── 11. Ссылки на посты ───────────────────────────────────
         for idx, url in enumerate(batch):
-            # Начиная со второй ссылки — нужно открыть дополнительные поля
-            if idx == 10:
-                self._click_any(page, [
-                    "a:has-text('additional links')",
-                    "span:has-text('additional links')",
-                    "*:has-text('I have additional links')",
-                ])
-                time.sleep(0.5)
-
             field_n = idx + 1
-            filled = False
-            for sel in [
-                f"input[aria-label='Link {field_n}']",
-                f"input[placeholder='Link {field_n}']",
-                f"input[name='url_{field_n}']",
-            ]:
+
+            # После Link 10 нужно раскрыть "I have additional links"
+            if idx == 10:
                 try:
-                    el = page.locator(sel).first
-                    if el.count() > 0 and el.is_visible(timeout=1500):
-                        el.scroll_into_view_if_needed()
-                        el.fill("")
-                        el.type(url, delay=random.randint(20, 50))
-                        filled = True
-                        break
+                    more = page.get_by_text("I have additional links to report", exact=True)
+                    if more.is_visible(timeout=2000):
+                        more.click()
+                        time.sleep(0.5)
                 except Exception:
-                    continue
+                    pass
 
-            if not filled:
-                # Fallback: все input-поля связанные с url на странице
-                try:
-                    inputs = page.locator("input[type='text'], input[type='url']")
-                    # Пропускаем первые поля (имя, email, etc.) — берём начиная с ~6-го
-                    el = inputs.nth(5 + idx)
-                    el.scroll_into_view_if_needed()
-                    el.fill("")
-                    el.type(url, delay=random.randint(20, 50))
-                except Exception as e:
-                    log.append(f"  ⚠️ Ссылка {field_n}: {str(e)[:60]}")
+            try:
+                if field_n == 1:
+                    field = page.get_by_placeholder("https://www.facebook.com/…").first
+                else:
+                    field = page.get_by_label(f"Link {field_n}", exact=True)
 
-            time.sleep(random.uniform(0.15, 0.4))
+                field.scroll_into_view_if_needed()
+                field.fill(url)
+            except Exception as e:
+                log.append(f"  ⚠️ Ссылка {field_n}: {str(e)[:60]}")
 
-        self._pause()
+            time.sleep(random.uniform(0.1, 0.3))
 
-        # 12. Infringement description
-        self._fill(page, [
-            "textarea[name='infringement_description']",
-            "textarea[name='description']",
-            "textarea:last-of-type",
-        ], s["infringement_desc"])
+        self._pause(0.5, 1.0)
 
-        self._pause()
+        # ── 12. Infringement description ──────────────────────────
+        page.get_by_label("Describe how you believe this content infringes", exact=False).fill(
+            s["infringement_desc"]
+        )
+        self._pause(0.5, 1.0)
 
-        # 13. Electronic signature
-        self._fill(page, [
-            "input[name='signature']",
-            "input[placeholder*='signature']",
-            "input[placeholder*='electronic']",
-        ], s["signature"])
-
+        # ── 13. Electronic signature ──────────────────────────────
+        page.get_by_label("Electronic signature", exact=False).fill(s["signature"])
         time.sleep(random.uniform(1.0, 2.0))
 
-        # 14. Submit (первая кнопка)
+        # ── 14. Submit ────────────────────────────────────────────
         try:
-            btn = page.locator(
-                "button[type='submit'], input[type='submit'], button:has-text('Submit')"
-            ).first
-            btn.scroll_into_view_if_needed()
-            btn.click(timeout=5000)
+            page.get_by_role("button", name="Submit").click(timeout=5000)
             time.sleep(random.uniform(2.0, 3.5))
         except Exception as e:
             log.append(f"  ❌ Submit: {str(e)[:80]}")
             return False
 
-        # 15. Ждём код подтверждения на email (если IMAP настроен)
+        # ── 15. Код подтверждения из email ────────────────────────
         imap_user = s.get("imap_user", "").strip()
         imap_pass = s.get("imap_pass", "").strip()
 
         if imap_user and imap_pass:
-            log.append(f"  📬 Ожидаю код подтверждения на {imap_user}...")
-
+            log.append(f"  📬 Ожидаю код на {imap_user}...")
             try:
-                code = fetch_confirmation_code(
-                    imap_user=imap_user,
-                    imap_pass=imap_pass,
-                    timeout=EMAIL_CODE_TIMEOUT,
-                )
+                code = fetch_confirmation_code(imap_user, imap_pass, timeout=EMAIL_CODE_TIMEOUT)
             except RuntimeError as e:
-                log.append(f"  ⚠️ IMAP ошибка: {str(e)[:100]}")
+                log.append(f"  ⚠️ IMAP: {str(e)[:100]}")
                 code = None
 
             if code:
-                log.append(f"  ✉️ Код получен: {code}")
-
-                # Ищем поле для ввода кода
-                code_filled = False
+                log.append(f"  ✉️ Код: {code}")
                 for sel in [
                     "input[name='confirmation_code']",
                     "input[name='code']",
-                    "input[placeholder*='code']",
-                    "input[placeholder*='код']",
-                    "input[aria-label*='code']",
                     "input[maxlength='6']",
+                    "input[placeholder*='code']",
                 ]:
                     try:
                         el = page.locator(sel).first
                         if el.count() > 0 and el.is_visible(timeout=2000):
-                            el.scroll_into_view_if_needed()
-                            el.fill("")
-                            el.type(code, delay=random.randint(80, 150))
-                            time.sleep(random.uniform(0.5, 1.0))
-
-                            # Финальный submit после кода
-                            self._click_any(page, [
-                                "button[type='submit']",
-                                "button:has-text('Submit')",
-                                "button:has-text('Confirm')",
-                                "button:has-text('Continue')",
-                            ])
-                            time.sleep(random.uniform(2.0, 3.5))
-                            code_filled = True
+                            el.fill(code)
+                            time.sleep(0.5)
+                            page.get_by_role("button", name="Submit").click(timeout=5000)
+                            time.sleep(2.0)
                             break
                     except Exception:
                         continue
-
-                if not code_filled:
-                    log.append("  ⚠️ Поле для кода не найдено — возможно форма принята без кода")
             else:
-                log.append(f"  ⚠️ Код не пришёл за {EMAIL_CODE_TIMEOUT}с — продолжаю без него")
+                log.append(f"  ⚠️ Код не пришёл за {EMAIL_CODE_TIMEOUT}с")
 
         return True
 
     # ── helpers ──────────────────────────────────────────────────
-    def _fill(self, page, selectors: list[str], value: str):
-        if not value:
-            return
-        for sel in selectors:
-            try:
-                el = page.locator(sel).first
-                if el.count() > 0 and el.is_visible(timeout=2000):
-                    el.scroll_into_view_if_needed()
-                    el.click()
-                    el.fill("")
-                    el.type(value, delay=random.randint(25, 65))
-                    return
-            except Exception:
-                continue
-
-    def _click_any(self, page, selectors: list[str]):
-        for sel in selectors:
-            try:
-                el = page.locator(sel).first
-                if el.count() > 0 and el.is_visible(timeout=2000):
-                    el.click()
-                    return
-            except Exception:
-                continue
-
-    def _pause(self):
-        time.sleep(random.uniform(0.4, 1.0))
+    def _pause(self, mn: float = 0.4, mx: float = 1.0):
+        time.sleep(random.uniform(mn, mx))

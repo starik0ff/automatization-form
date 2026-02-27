@@ -12,11 +12,13 @@ from pydantic import BaseModel
 from worker import BotWorker
 from email_reader import test_imap_connection
 
-app = FastAPI(title="FB Form Bot")
-templates = Jinja2Templates(directory="templates")
+BASE_DIR = Path(__file__).parent
 
-STATUS_FILE  = Path("status.json")
-STATS_FILE   = Path("stats.json")
+app = FastAPI(title="FB Form Bot")
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+STATUS_FILE  = BASE_DIR / "status.json"
+STATS_FILE   = BASE_DIR / "stats.json"
 
 bot_worker: Optional[BotWorker] = None
 bot_thread:  Optional[threading.Thread] = None

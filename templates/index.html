@@ -633,12 +633,13 @@
               </div>
               <div class="form-field">
                 <label class="form-label req">Тип произведения</label>
-                <div class="checkbox-group" id="sWorkType">
-                  <label class="cb-option"><input type="checkbox" value="Photo"/> Photo</label>
-                  <label class="cb-option"><input type="checkbox" value="Video"/> Video</label>
-                  <label class="cb-option"><input type="checkbox" value="Text"/> Text</label>
-                  <label class="cb-option"><input type="checkbox" value="Other"/> Other</label>
-                </div>
+                <select id="sWorkType">
+                  <option value="">— выбери —</option>
+                  <option value="Photo">Photo</option>
+                  <option value="Video">Video</option>
+                  <option value="Text">Text</option>
+                  <option value="Other">Other</option>
+                </select>
               </div>
               <div class="form-field">
                 <label class="form-label req">Электронная подпись</label>
@@ -906,30 +907,16 @@
 
   // ── Checkboxes ────────────────────────────────────────────────
   function getWorkTypes() {
-    return Array.from(document.querySelectorAll('#sWorkType input:checked')).map(cb => cb.value);
+    const val = document.getElementById('sWorkType').value;
+    return val ? [val] : [];
   }
-  function setWorkTypes(values) {
-    document.querySelectorAll('#sWorkType .cb-option').forEach(lbl => {
-      const cb = lbl.querySelector('input');
-      const on = values.includes(cb.value);
-      cb.checked = on;
-      lbl.classList.toggle('checked', on);
-    });
-  }
-  document.querySelectorAll('#sWorkType .cb-option').forEach(lbl => {
-    lbl.addEventListener('click', () => {
-      const cb = lbl.querySelector('input');
-      cb.checked = !cb.checked;
-      lbl.classList.toggle('checked', cb.checked);
-    });
-  });
 
   // ── LocalStorage ──────────────────────────────────────────────
   const LS_KEYS = ['sFullName','sRightsOwner','sEmail','sCountry','sSignature','sWorkDesc','sInfDesc','accountUrl','sImapUser','sImapPass'];
 
   function saveStatic() {
     LS_KEYS.forEach(k => localStorage.setItem(k, document.getElementById(k).value));
-    localStorage.setItem('sWorkType', JSON.stringify(getWorkTypes()));
+    localStorage.setItem('sWorkType', document.getElementById('sWorkType').value);
     toast('💾 Данные сохранены', 'ok');
   }
 
@@ -939,7 +926,7 @@
       if (v) document.getElementById(k).value = v;
     });
     const wt = localStorage.getItem('sWorkType');
-    if (wt) { try { setWorkTypes(JSON.parse(wt)); } catch {} }
+    if (wt) document.getElementById('sWorkType').value = wt;
     updateUrlCount();
   }
 
@@ -979,7 +966,7 @@
         full_name:    document.getElementById('sFullName').value.trim(),
         email:        document.getElementById('sEmail').value.trim(),
         country:      document.getElementById('sCountry').value,
-        work_type:    getWorkTypes().join(', '),
+        work_type:    document.getElementById('sWorkType').value,
         rights_owner: document.getElementById('sRightsOwner').value.trim(),
         work_desc:    document.getElementById('sWorkDesc').value.trim(),
         inf_desc:     document.getElementById('sInfDesc').value.trim(),
