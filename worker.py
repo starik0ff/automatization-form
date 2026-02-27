@@ -119,64 +119,72 @@ class BotWorker:
     def _submit_batch(self, page, batch: list, log: list) -> bool:
         s = self.static
 
+        log.append("  → Открываю форму...")
         page.goto(FORM_URL, wait_until="domcontentloaded", timeout=30000)
         page.wait_for_load_state("networkidle", timeout=15000)
 
         # ── 1. I am the rights owner ──────────────────────────────
-        # Радиокнопка скрыта (opacity:0), кликаем по лейблу
+        log.append("  → Выбираю: I am the rights owner")
         page.get_by_text("I am the rights owner.", exact=True).click()
-        self._pause()
-
-        # Ждём появления полей формы
-        page.wait_for_selector("input[aria-label='Your full name']", timeout=10000)
+        # Ждём появления поля Full name через get_by_label (он сам ждёт до 10с)
+        page.get_by_label("Your full name").wait_for(timeout=12000)
+        self._pause(0.5, 1.0)
 
         # ── 2. Full name ──────────────────────────────────────────
+        log.append("  → Заполняю: Full name")
         page.get_by_label("Your full name").fill(s["full_name"])
-        self._pause(0.3, 0.6)
+        self._pause(0.3, 0.5)
 
         # ── 3. Email ──────────────────────────────────────────────
-        page.get_by_label("Email address", exact=False).fill(s["email"])
-        self._pause(0.3, 0.6)
+        log.append("  → Заполняю: Email")
+        # Берём первый input типа email на странице
+        page.locator("input[type='email']").first.fill(s["email"])
+        self._pause(0.3, 0.5)
 
         # ── 4. Confirm email ──────────────────────────────────────
-        page.get_by_label("Confirm your email address").fill(s["email"])
-        self._pause(0.3, 0.6)
+        log.append("  → Заполняю: Confirm email")
+        page.locator("input[type='email']").nth(1).fill(s["email"])
+        self._pause(0.3, 0.5)
 
         # ── 5. Country ────────────────────────────────────────────
+        log.append(f"  → Выбираю страну: {s['country']}")
         page.get_by_label("Where are you asserting rights?").select_option(label=s["country"])
-        self._pause(0.3, 0.6)
+        self._pause(0.3, 0.5)
 
-        # ── 6. Work type (SELECT — берём первый выбранный тип) ───
-        # На форме это одиночный <select>, берём первое значение из списка
-        work_types = [w.strip() for w in s["work_type"].split(",") if w.strip()]
-        if work_types:
+        # ── 6. Work type ──────────────────────────────────────────
+        work_type = s["work_type"].split(",")[0].strip() if s["work_type"] else ""
+        if work_type:
+            log.append(f"  → Выбираю тип: {work_type}")
             page.get_by_label("Which of these best describes the copyrighted work?").select_option(
-                label=work_types[0]
+                label=work_type
             )
-        self._pause(0.3, 0.6)
+        self._pause(0.3, 0.5)
 
         # ── 7. Rights owner name ─────────────────────────────────
+        log.append("  → Заполняю: Rights owner name")
         page.get_by_label("Name of the rights owner", exact=False).fill(s["rights_owner_name"])
-        self._pause(0.3, 0.6)
+        self._pause(0.3, 0.5)
 
         # ── 8. Link to copyrighted work ───────────────────────────
+        log.append("  → Заполняю: Ссылка на оригинал")
         page.get_by_label("Provide a link to the copyrighted work", exact=False).fill(self.account_url)
-        self._pause(0.3, 0.6)
+        self._pause(0.3, 0.5)
 
         # ── 9. Describe copyrighted work ─────────────────────────
+        log.append("  → Заполняю: Описание произведения")
         page.get_by_label("Describe your copyrighted work", exact=False).fill(s["work_description"])
-        self._pause(0.5, 1.0)
+        self._pause(0.5, 0.8)
 
         # ── 10. Content type = Photo, video or post ───────────────
-        # Чекбокс скрыт (readonly), кликаем по лейблу
+        log.append("  → Выбираю: Photo, video or post")
         page.get_by_text("Photo, video or post", exact=True).click()
-        self._pause(0.5, 1.0)
+        self._pause(0.5, 0.8)
 
         # ── 11. Ссылки на посты ───────────────────────────────────
+        log.append(f"  → Заполняю {len(batch)} ссылок...")
         for idx, url in enumerate(batch):
             field_n = idx + 1
 
-            # После Link 10 нужно раскрыть "I have additional links"
             if idx == 10:
                 try:
                     more = page.get_by_text("I have additional links to report", exact=True)
@@ -197,21 +205,24 @@ class BotWorker:
             except Exception as e:
                 log.append(f"  ⚠️ Ссылка {field_n}: {str(e)[:60]}")
 
-            time.sleep(random.uniform(0.1, 0.3))
+            time.sleep(random.uniform(0.1, 0.25))
 
-        self._pause(0.5, 1.0)
+        self._pause(0.5, 0.8)
 
         # ── 12. Infringement description ──────────────────────────
+        log.append("  → Заполняю: Описание нарушения")
         page.get_by_label("Describe how you believe this content infringes", exact=False).fill(
             s["infringement_desc"]
         )
-        self._pause(0.5, 1.0)
+        self._pause(0.5, 0.8)
 
         # ── 13. Electronic signature ──────────────────────────────
+        log.append("  → Заполняю: Подпись")
         page.get_by_label("Electronic signature", exact=False).fill(s["signature"])
-        time.sleep(random.uniform(1.0, 2.0))
+        time.sleep(random.uniform(0.8, 1.5))
 
         # ── 14. Submit ────────────────────────────────────────────
+        log.append("  → Нажимаю Submit...")
         try:
             page.get_by_role("button", name="Submit").click(timeout=5000)
             time.sleep(random.uniform(2.0, 3.5))
