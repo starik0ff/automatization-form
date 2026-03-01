@@ -888,7 +888,9 @@
         body: JSON.stringify({ fb_email: email, fb_password: pass })
       });
       const d = await r.json();
-      showSessStatus(d.message, d.ok);
+      console.log('[/api/login] status:', r.status, 'body:', d);
+      const msg = d.message || d.detail || JSON.stringify(d);
+      showSessStatus(msg, d.ok === true);
       if (d.ok) {
         document.getElementById('sess-pass').value = '';
         checkSession();

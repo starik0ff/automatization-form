@@ -210,7 +210,11 @@ async def test_imap(payload: ImapTestPayload):
 @app.post("/api/login")
 async def fb_login(payload: FbLoginPayload):
     """Headless-логин в Facebook и сохранение сессии."""
+    import asyncio
     if not payload.fb_email or not payload.fb_password:
         return JSONResponse({"ok": False, "message": "Email и пароль обязательны"}, status_code=400)
-    ok, msg = login_and_save(payload.fb_email, payload.fb_password)
+    loop = asyncio.get_event_loop()
+    ok, msg = await loop.run_in_executor(
+        None, login_and_save, payload.fb_email, payload.fb_password
+    )
     return {"ok": ok, "message": msg}
