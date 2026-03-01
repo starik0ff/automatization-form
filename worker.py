@@ -1,10 +1,14 @@
 import json
+import platform
 import random
 import time
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 from email_reader import fetch_confirmation_code
+
+# На Linux (сервер) — headless автоматически
+IS_HEADLESS = platform.system() == "Linux"
 
 FORM_URL        = "https://www.facebook.com/help/contact/1758255661104383"
 LINKS_PER_BATCH = 30
@@ -55,7 +59,7 @@ class BotWorker:
 
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=False)
+                browser = p.chromium.launch(headless=IS_HEADLESS)
                 context = browser.new_context(
                     storage_state=str(session_path.resolve()),
                     user_agent=(

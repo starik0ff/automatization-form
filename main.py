@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from worker import BotWorker
 from email_reader import test_imap_connection
+from fb_login import login_and_save
 
 BASE_DIR = Path(__file__).parent
 
@@ -42,6 +43,11 @@ class LinksPayload(BaseModel):
 class ImapTestPayload(BaseModel):
     imap_user: str
     imap_pass: str
+
+
+class FbLoginPayload(BaseModel):
+    fb_email: str
+    fb_password: str
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -192,10 +198,19 @@ async def reset():
 
 @app.get("/api/session-exists")
 async def session_exists():
-    return {"exists": Path("cookies/session.json").exists()}
+    return {"exists": (BASE_DIR / "cookies" / "session.json").exists()}
 
 
 @app.post("/api/test-imap")
 async def test_imap(payload: ImapTestPayload):
     ok, msg = test_imap_connection(payload.imap_user, payload.imap_pass)
+    return {"ok": ok, "message": msg}
+
+
+@app.post("/api/login")
+async def fb_login(payload: FbLoginPayload):
+    """Headless-логин в Facebook и сохранение сессии."""
+    if not payload.fb_email or not payload.fb_password:
+        return JSONResponse({"ok": False, "message": "Email и пароль обязательны"}, status_code=400)
+    ok, msg = login_and_save(payload.fb_email, payload.fb_password)
     return {"ok": ok, "message": msg}

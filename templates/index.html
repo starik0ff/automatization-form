@@ -428,6 +428,13 @@
   </div>
 
   <div class="sidebar-section">
+    <div class="sidebar-section-title">Настройки</div>
+    <div class="nav-item" onclick="navigate('session')" id="nav-session">
+      <span class="nav-icon">🔐</span> FB Сессия
+    </div>
+  </div>
+
+  <div class="sidebar-section">
     <div class="sidebar-section-title">Сервисы</div>
 
     <!-- Facebook -->
@@ -479,6 +486,45 @@
   </div>
 
   <div class="content">
+
+    <!-- ═══════════════════════════════════
+         VIEW: SESSION
+    ═══════════════════════════════════ -->
+    <div class="view" id="view-session">
+      <div style="max-width:520px;margin:0 auto">
+        <div class="panel">
+          <div class="panel-title">🔐 Facebook Сессия</div>
+          <p style="color:var(--muted2);font-size:13px;margin-bottom:18px">
+            Войдите в Facebook headless-режиме прямо из панели.<br>
+            Сессия сохранится в <code style="color:var(--blue)">cookies/session.json</code> на сервере.
+          </p>
+
+          <!-- Session status -->
+          <div id="sess-status-box" style="display:none;padding:12px 16px;border-radius:8px;margin-bottom:18px;font-size:14px"></div>
+
+          <div class="form-field" style="margin-bottom:14px">
+            <label class="form-label req">Email Facebook</label>
+            <input type="email" id="sess-email" placeholder="your@email.com"/>
+          </div>
+          <div class="form-field" style="margin-bottom:20px">
+            <label class="form-label req">Пароль Facebook</label>
+            <input type="password" id="sess-pass" placeholder="••••••••"/>
+          </div>
+
+          <div style="display:flex;gap:10px;align-items:center">
+            <button class="btn btn-primary" id="sess-login-btn" onclick="fbLogin()">
+              Войти и сохранить сессию
+            </button>
+            <span id="sess-spinner" style="display:none;color:var(--muted2);font-size:13px">⏳ Подождите…</span>
+          </div>
+
+          <div style="margin-top:24px;padding-top:18px;border-top:1px solid var(--border)">
+            <div class="panel-title" style="font-size:13px;margin-bottom:8px">Текущий статус</div>
+            <div id="sess-cur-status" style="font-size:14px;color:var(--muted2)">Проверка…</div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- ═══════════════════════════════════
          VIEW: DASHBOARD
@@ -788,6 +834,7 @@
   const VIEWS = {
     'dashboard': { title: 'Dashboard',           sub: 'Общая статистика по всем сервисам' },
     'fb-form':   { title: 'Facebook Copyright',  sub: 'Форма: facebook.com/help/contact/1758255661104383' },
+    'session':   { title: 'Facebook Сессия',     sub: 'Headless-логин и управление сессией' },
   };
 
   function navigate(id) {
@@ -807,14 +854,60 @@
       const d = await r.json();
       const dot  = document.getElementById('sidebarDot');
       const text = document.getElementById('sidebarSession');
+      const cur  = document.getElementById('sess-cur-status');
       if (d.exists) {
-        dot.className  = 'dot green';
+        dot.className    = 'dot green';
         text.textContent = 'Сессия активна';
+        if (cur) cur.innerHTML = '<span style="color:var(--green)">✅ Сессия найдена и активна</span>';
       } else {
-        dot.className  = 'dot red';
+        dot.className    = 'dot red';
         text.textContent = 'Сессия не найдена';
+        if (cur) cur.innerHTML = '<span style="color:var(--red)">❌ Сессия не найдена — войдите ниже</span>';
       }
     } catch {}
+  }
+
+  // ── FB headless login ─────────────────────────────────────────
+  async function fbLogin() {
+    const email = document.getElementById('sess-email').value.trim();
+    const pass  = document.getElementById('sess-pass').value;
+    if (!email || !pass) {
+      showSessStatus('Введите email и пароль', false);
+      return;
+    }
+    const btn = document.getElementById('sess-login-btn');
+    const spinner = document.getElementById('sess-spinner');
+    btn.disabled = true;
+    spinner.style.display = 'inline';
+    document.getElementById('sess-status-box').style.display = 'none';
+
+    try {
+      const r = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fb_email: email, fb_password: pass })
+      });
+      const d = await r.json();
+      showSessStatus(d.message, d.ok);
+      if (d.ok) {
+        document.getElementById('sess-pass').value = '';
+        checkSession();
+      }
+    } catch (e) {
+      showSessStatus('Ошибка сети: ' + e.message, false);
+    } finally {
+      btn.disabled = false;
+      spinner.style.display = 'none';
+    }
+  }
+
+  function showSessStatus(msg, ok) {
+    const box = document.getElementById('sess-status-box');
+    box.style.display = 'block';
+    box.style.background = ok ? 'var(--green-dim)' : 'var(--red-dim)';
+    box.style.border = `1px solid ${ok ? 'var(--green)' : 'var(--red)'}`;
+    box.style.color  = ok ? 'var(--green)' : 'var(--red)';
+    box.textContent  = (ok ? '✅ ' : '❌ ') + msg;
   }
 
   // ── Stats ─────────────────────────────────────────────────────
