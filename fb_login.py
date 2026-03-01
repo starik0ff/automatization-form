@@ -37,50 +37,53 @@ def login_and_save(fb_email: str, fb_password: str) -> tuple:
             page = context.new_page()
 
             # Открываем страницу логина
-            page.goto("https://www.facebook.com/login", wait_until="domcontentloaded", timeout=30000)
-            page.wait_for_load_state("networkidle", timeout=15000)
+            page.goto("https://www.facebook.com/login", wait_until="domcontentloaded", timeout=60000)
+
+            # Ждём поле email — главный индикатор что страница загрузилась
+            try:
+                page.locator("#email").wait_for(timeout=30000)
+            except Exception:
+                # Может быть редирект на другой URL — ждём просто немного
+                time.sleep(5)
 
             # Принимаем куки если есть попап
-            try:
-                cookie_btn = page.get_by_role("button", name="Allow all cookies")
-                if cookie_btn.is_visible(timeout=3000):
-                    cookie_btn.click()
-                    time.sleep(1)
-            except Exception:
-                pass
-            try:
-                cookie_btn2 = page.get_by_role("button", name="Accept all")
-                if cookie_btn2.is_visible(timeout=2000):
-                    cookie_btn2.click()
-                    time.sleep(1)
-            except Exception:
-                pass
+            for btn_name in ["Allow all cookies", "Accept all", "Allow essential and optional cookies"]:
+                try:
+                    btn = page.get_by_role("button", name=btn_name)
+                    if btn.is_visible(timeout=2000):
+                        btn.click()
+                        time.sleep(1)
+                        break
+                except Exception:
+                    pass
 
             # Вводим email
             email_field = page.locator("#email")
-            email_field.wait_for(timeout=10000)
+            email_field.wait_for(timeout=20000)
             email_field.fill(fb_email)
-            time.sleep(0.5)
+            time.sleep(1)
 
             # Вводим пароль
             page.locator("#pass").fill(fb_password)
-            time.sleep(0.5)
+            time.sleep(1)
 
             # Нажимаем Login
             page.locator("[name='login']").click()
 
-            # Ждём результата (редирект или ошибка)
-            time.sleep(4)
-
-            current_url = page.url
-
-            # Проверяем на ошибку логина
-            if "login" in current_url and "checkpoint" not in current_url:
-                error_el = page.locator("#error_box, [data-testid='royal_login_form'] div[role='alert']")
+            # Ждём результата — даём Facebook до 30 секунд на редирект
+            for _ in range(15):
+                time.sleep(2)
+                current_url = page.url
+                if "login" not in current_url:
+                    break
+                # Проверяем ошибку сразу
+                error_el = page.locator("#error_box")
                 if error_el.count() > 0:
                     err_text = error_el.first.inner_text()
                     browser.close()
                     return False, f"Ошибка Facebook: {err_text[:200]}"
+
+            current_url = page.url
 
             # Проверяем на двухфакторку / checkpoint
             if "checkpoint" in current_url or "two_step" in current_url:
@@ -93,13 +96,12 @@ def login_and_save(fb_email: str, fb_password: str) -> tuple:
                 browser.close()
                 return True, "Сессия сохранена успешно"
 
-            # Дополнительное ожидание если ещё грузится
-            time.sleep(3)
+            # Всё равно сохраняем — может быть промежуточная страница
             context.storage_state(path=str(SESSION_PATH))
             browser.close()
-            return True, "Сессия сохранена"
+            return False, f"Не удалось подтвердить вход. Текущий URL: {current_url[:100]}"
 
-    except PlaywrightTimeout:
-        return False, "Таймаут при загрузке Facebook"
+    except PlaywrightTimeout as e:
+        return False, f"Таймаут при загрузке Facebook ({str(e)[:120]})"
     except Exception as e:
         return False, str(e)
