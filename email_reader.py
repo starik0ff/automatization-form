@@ -24,29 +24,43 @@ def _decode_str(value: Union[str, bytes], charset: Optional[str] = None) -> str:
 
 
 def _get_body(msg) -> str:
-    """Извлекает текст письма (plain text или html fallback)."""
-    body = ""
+    """Извлекает текст письма. Возвращает plain text + HTML stripped (оба варианта)."""
+    import re as _re
+    parts_text = []
+    parts_html = []
+
     if msg.is_multipart():
         for part in msg.walk():
             ct = part.get_content_type()
             cd = str(part.get("Content-Disposition", ""))
-            if ct == "text/plain" and "attachment" not in cd:
-                payload = part.get_payload(decode=True)
-                charset = part.get_content_charset() or "utf-8"
-                body = _decode_str(payload, charset)
-                break
-        if not body:
-            for part in msg.walk():
-                if part.get_content_type() == "text/html":
-                    payload = part.get_payload(decode=True)
-                    charset = part.get_content_charset() or "utf-8"
-                    body = _decode_str(payload, charset)
-                    break
+            if "attachment" in cd:
+                continue
+            payload = part.get_payload(decode=True)
+            if not payload:
+                continue
+            charset = part.get_content_charset() or "utf-8"
+            decoded = _decode_str(payload, charset)
+            if ct == "text/plain":
+                parts_text.append(decoded)
+            elif ct == "text/html":
+                parts_html.append(decoded)
     else:
         payload = msg.get_payload(decode=True)
         charset = msg.get_content_charset() or "utf-8"
-        body = _decode_str(payload, charset)
-    return body
+        decoded = _decode_str(payload, charset)
+        ct = msg.get_content_type()
+        if ct == "text/html":
+            parts_html.append(decoded)
+        else:
+            parts_text.append(decoded)
+
+    # Strip HTML tags to plain text for searching
+    html_as_text = ""
+    for h in parts_html:
+        html_as_text += _re.sub(r"<[^>]+>", " ", h)
+
+    # Return plain text first, then html-stripped — concatenated so regex can search both
+    return "\n".join(parts_text) + "\n" + html_as_text
 
 
 def _extract_code(text: str) -> Optional[str]:
@@ -65,62 +79,80 @@ def _extract_code(text: str) -> Optional[str]:
 def fetch_confirmation_code(
     imap_user: str,
     imap_pass: str,
-    timeout: int = 90,
+    timeout: int = 180,
     poll_interval: int = 4,
     sender_filter: str = "facebook",
+    min_uid: int = 0,
 ) -> Optional[str]:
     """
-    Подключается к IMAP, ждёт письмо от Facebook с кодом подтверждения.
+    Подключается к IMAP, ждёт письмо от Facebook/Meta с кодом подтверждения.
+    Проверяет INBOX и папки спама (Spam, Junk).
 
-    :param imap_user:      Email для входа (напр. user@domain.com)
-    :param imap_pass:      Пароль
-    :param timeout:        Максимальное время ожидания в секундах
-    :param poll_interval:  Интервал проверки почты в секундах
-    :param sender_filter:  Подстрока в адресе отправителя
-    :return:               6-значный код или None если не нашли
+    :param min_uid:        Минимальный UID письма (игнорируем письма старше этого)
     """
+    # Folders to check in priority order
+    FOLDERS_TO_CHECK = ["INBOX", "Spam", "Junk", "Junk Email", "INBOX.Spam", "INBOX.Junk"]
+
     deadline = time.time() + timeout
 
     try:
         mail = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
         mail.login(imap_user, imap_pass)
-        mail.select("INBOX")
 
-        # Запоминаем UIDs уже существующих писем чтобы не читать старые
-        _, existing = mail.search(None, "ALL")
-        seen_ids = set(existing[0].split()) if existing[0] else set()
+        # Find available folders that exist on this server
+        _, folder_list = mail.list()
+        available_folders = []
+        for f in folder_list or []:
+            decoded = f.decode() if isinstance(f, bytes) else f
+            # Extract folder name (last part after space or quoted)
+            parts = decoded.split('"')
+            fname = parts[-1].strip() if len(parts) > 1 else decoded.split()[-1]
+            available_folders.append(fname)
+
+        folders = [f for f in FOLDERS_TO_CHECK if f in available_folders]
+        if "INBOX" not in folders:
+            folders.insert(0, "INBOX")
+
+        # Facebook sends verification emails from @facebookmail.com and @email.meta.com
+        sender_filters = [sender_filter, "meta", "facebookmail"]
+        processed: set = set()
 
         while time.time() < deadline:
             time.sleep(poll_interval)
 
-            # Ищем новые непрочитанные от Facebook
-            _, result = mail.search(
-                None,
-                f'UNSEEN FROM "{sender_filter}"',
-            )
-            if not result[0]:
-                continue
+            for folder in folders:
+                try:
+                    mail.select(folder)
 
-            new_ids = set(result[0].split()) - seen_ids
-            if not new_ids:
-                continue
+                    # Search ALL (not just UNSEEN) — PEEK fetch won't mark as read anyway
+                    candidate_ids: set = set()
+                    for sf in sender_filters:
+                        _, result = mail.search(None, f'ALL FROM "{sf}"')
+                        if result[0]:
+                            candidate_ids.update(result[0].split())
 
-            for uid in sorted(new_ids):
-                _, msg_data = mail.fetch(uid, "(RFC822)")
-                if not msg_data or not msg_data[0]:
+                    # Only consider emails newer than baseline recorded before form submit
+                    new_ids = {
+                        uid for uid in candidate_ids
+                        if int(uid) > min_uid and uid not in processed
+                    }
+
+                    for uid in sorted(new_ids, reverse=True):  # newest first
+                        _, msg_data = mail.fetch(uid, "(BODY.PEEK[])")  # PEEK = don't mark as read
+                        if not msg_data or not msg_data[0]:
+                            continue
+
+                        msg = email.message_from_bytes(msg_data[0][1])
+                        body = _get_body(msg)
+                        code = _extract_code(body)
+                        processed.add(uid)
+
+                        if code:
+                            mail.logout()
+                            return code
+
+                except Exception:
                     continue
-
-                msg = email.message_from_bytes(msg_data[0][1])
-                body = _get_body(msg)
-                code = _extract_code(body)
-
-                if code:
-                    # Помечаем письмо как прочитанное
-                    mail.store(uid, "+FLAGS", "\\Seen")
-                    mail.logout()
-                    return code
-
-                seen_ids.add(uid)
 
         mail.logout()
     except imaplib.IMAP4.error as e:

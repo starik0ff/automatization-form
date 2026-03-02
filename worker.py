@@ -14,7 +14,15 @@ FORM_URL        = "https://www.facebook.com/help/contact/1758255661104383"
 LINKS_PER_BATCH = 30
 DELAY_MIN       = 8
 DELAY_MAX       = 18
-EMAIL_CODE_TIMEOUT = 90
+EMAIL_CODE_TIMEOUT = 180
+
+# Maps user-entered work type (RU or EN) → English option value used by Facebook's select
+WORK_TYPE_MAP = {
+    "фото": "Photo",   "photo": "Photo",
+    "видео": "Video",  "video": "Video",
+    "текст": "Text",   "text": "Text",
+    "другое": "Other", "other": "Other",
+}
 
 
 class BotWorker:
@@ -122,92 +130,112 @@ class BotWorker:
     # ─────────────────────────────────────────────────────────────
     def _submit_batch(self, page, batch: list, log: list) -> bool:
         s = self.static
+        imap_user = s.get("imap_user", "").strip()
+        imap_pass = s.get("imap_pass", "").strip()
+
+        # Connect to IMAP BEFORE submitting the form so we don't miss fast-arriving emails
+        imap_baseline = 0
+        if imap_user and imap_pass:
+            try:
+                import imaplib as _imap
+                _m = _imap.IMAP4_SSL("imap.titan.email", 993)
+                _m.login(imap_user, imap_pass)
+                _m.select("INBOX")
+                _, _ex = _m.search(None, "ALL")
+                _ids = _ex[0].split() if _ex[0] else []
+                imap_baseline = int(_ids[-1]) if _ids else 0
+                _m.logout()
+                log.append(f"  📬 IMAP готов (последнее письмо #{imap_baseline})")
+            except Exception as e:
+                log.append(f"  ⚠️ IMAP предподключение: {str(e)[:80]}")
 
         log.append("  → Открываю форму...")
         page.goto(FORM_URL, wait_until="domcontentloaded", timeout=30000)
         page.wait_for_load_state("networkidle", timeout=15000)
 
         # ── 1. I am the rights owner ──────────────────────────────
+        # JS click bypasses the <span> overlay on Facebook's custom radio buttons.
+        # Input name/value attributes are always English regardless of FB UI language.
         log.append("  → Выбираю: I am the rights owner")
-        page.get_by_text("I am the rights owner.", exact=True).click()
-        # Ждём появления поля Full name через get_by_label (он сам ждёт до 10с)
-        page.get_by_label("Your full name").wait_for(timeout=12000)
+        page.locator('input[name="copyright_owner"][value="I am the rights owner."]').evaluate("el => el.click()")
+        page.locator('input[name="your_name"]').wait_for(state="visible", timeout=12000)
         self._pause(0.5, 1.0)
 
         # ── 2. Full name ──────────────────────────────────────────
         log.append("  → Заполняю: Full name")
-        page.get_by_label("Your full name").fill(s["full_name"])
+        page.locator('input[name="your_name"]').fill(s["full_name"])
         self._pause(0.3, 0.5)
 
         # ── 3. Email ──────────────────────────────────────────────
         log.append("  → Заполняю: Email")
-        # Берём первый input типа email на странице
-        page.locator("input[type='email']").first.fill(s["email"])
+        page.locator('input[name="email"]').fill(s["email"])
         self._pause(0.3, 0.5)
 
         # ── 4. Confirm email ──────────────────────────────────────
         log.append("  → Заполняю: Confirm email")
-        page.locator("input[type='email']").nth(1).fill(s["email"])
+        page.locator('input[name="confirm_email"]').fill(s["email"])
         self._pause(0.3, 0.5)
 
         # ── 5. Country ────────────────────────────────────────────
+        # Select option by value (always English) — not label (changes with FB UI language)
         log.append(f"  → Выбираю страну: {s['country']}")
-        page.get_by_label("Where are you asserting rights?").select_option(label=s["country"])
+        page.locator('select[name="rights_owner_country_routing"]').select_option(value=s["country"])
         self._pause(0.3, 0.5)
 
         # ── 6. Work type ──────────────────────────────────────────
-        work_type = s["work_type"].split(",")[0].strip() if s["work_type"] else ""
+        work_type = s["work_type"].split(",")[0].strip() if s.get("work_type") else ""
         if work_type:
             log.append(f"  → Выбираю тип: {work_type}")
-            page.get_by_label("Which of these best describes the copyrighted work?").select_option(
-                label=work_type
-            )
+            wt_value = WORK_TYPE_MAP.get(work_type.lower(), work_type)
+            try:
+                page.locator('select[name="describe_copyrighted_work_me"]').select_option(value=wt_value)
+            except Exception:
+                try:
+                    page.locator('select[name="describe_copyrighted_work_me"]').select_option(label=work_type)
+                except Exception:
+                    log.append(f"  ⚠️ Тип '{work_type}' не найден, пропускаю")
         self._pause(0.3, 0.5)
 
         # ── 7. Rights owner name ─────────────────────────────────
         log.append("  → Заполняю: Rights owner name")
-        page.get_by_label("Name of the rights owner", exact=False).fill(s["rights_owner_name"])
+        page.locator('input[name="reporter_name"]').fill(s["rights_owner_name"])
         self._pause(0.3, 0.5)
 
         # ── 8. Link to copyrighted work ───────────────────────────
         log.append("  → Заполняю: Ссылка на оригинал")
-        page.get_by_label("Provide a link to the copyrighted work", exact=False).fill(self.account_url)
+        page.locator('input[name="copyright_url"]').fill(self.account_url)
         self._pause(0.3, 0.5)
 
         # ── 9. Describe copyrighted work ─────────────────────────
         log.append("  → Заполняю: Описание произведения")
-        page.get_by_label("Describe your copyrighted work", exact=False).fill(s["work_description"])
+        page.locator('textarea[name="describe_copyrighted_work_me_URLs"]').fill(s["work_description"])
         self._pause(0.5, 0.8)
 
         # ── 10. Content type = Photo, video or post ───────────────
         log.append("  → Выбираю: Photo, video or post")
-        page.get_by_text("Photo, video or post", exact=True).click()
+        page.locator('input[name="Content_type[]"][value="Photo, video or post"]').evaluate("el => el.click()")
         self._pause(0.5, 0.8)
 
         # ── 11. Ссылки на посты ───────────────────────────────────
+        # Links are textareas: content_urls (link 1), content_urls1 (link 2), ..., content_urls29 (link 30)
         log.append(f"  → Заполняю {len(batch)} ссылок...")
         for idx, url in enumerate(batch):
-            field_n = idx + 1
-
             if idx == 10:
                 try:
-                    more = page.get_by_text("I have additional links to report", exact=True)
-                    if more.is_visible(timeout=2000):
-                        more.click()
+                    cb = page.locator('input[name="additionallinks[]"]')
+                    if cb.count() > 0 and not cb.is_checked(timeout=2000):
+                        cb.evaluate("el => el.click()")
                         time.sleep(0.5)
                 except Exception:
                     pass
 
             try:
-                if field_n == 1:
-                    field = page.get_by_placeholder("https://www.facebook.com/…").first
-                else:
-                    field = page.get_by_label(f"Link {field_n}", exact=True)
-
+                field_name = "content_urls" if idx == 0 else f"content_urls{idx}"
+                field = page.locator(f'textarea[name="{field_name}"]')
                 field.scroll_into_view_if_needed()
                 field.fill(url)
             except Exception as e:
-                log.append(f"  ⚠️ Ссылка {field_n}: {str(e)[:60]}")
+                log.append(f"  ⚠️ Ссылка {idx+1}: {str(e)[:60]}")
 
             time.sleep(random.uniform(0.1, 0.25))
 
@@ -215,55 +243,102 @@ class BotWorker:
 
         # ── 12. Infringement description ──────────────────────────
         log.append("  → Заполняю: Описание нарушения")
-        page.get_by_label("Describe how you believe this content infringes", exact=False).fill(
-            s["infringement_desc"]
-        )
+        page.locator('textarea[name="why_reporting_other"]').fill(s["infringement_desc"])
         self._pause(0.5, 0.8)
 
         # ── 13. Electronic signature ──────────────────────────────
         log.append("  → Заполняю: Подпись")
-        page.get_by_label("Electronic signature", exact=False).fill(s["signature"])
+        page.locator('input[name="Electronic_sig"]').fill(s["signature"])
         time.sleep(random.uniform(0.8, 1.5))
 
         # ── 14. Submit ────────────────────────────────────────────
         log.append("  → Нажимаю Submit...")
-        try:
-            page.get_by_role("button", name="Submit").click(timeout=5000)
-            time.sleep(random.uniform(2.0, 3.5))
-        except Exception as e:
-            log.append(f"  ❌ Submit: {str(e)[:80]}")
+        submitted = False
+        for btn_name in ["Отправить", "Submit"]:
+            try:
+                page.get_by_role("button", name=btn_name).click(timeout=5000)
+                submitted = True
+                break
+            except Exception:
+                continue
+
+        if not submitted:
+            log.append("  ❌ Кнопка Submit не найдена")
             return False
 
-        # ── 15. Код подтверждения из email ────────────────────────
-        imap_user = s.get("imap_user", "").strip()
-        imap_pass = s.get("imap_pass", "").strip()
+        time.sleep(random.uniform(2.0, 3.5))
 
+        # Log URL and title to confirm submission page
+        log.append(f"  🌐 URL: {page.url}")
+        log.append(f"  📄 Заголовок: {page.title()}")
+        try:
+            screenshot_path = Path(__file__).parent / "cookies" / "submit_result.png"
+            page.screenshot(path=str(screenshot_path))
+            log.append("  📸 Скриншот: cookies/submit_result.png")
+        except Exception:
+            pass
+
+        # ── 15. Код подтверждения из email ────────────────────────
         if imap_user and imap_pass:
-            log.append(f"  📬 Ожидаю код на {imap_user}...")
+            log.append(f"  📬 Ожидаю код на {imap_user} (базовый ID: {imap_baseline})...")
             try:
-                code = fetch_confirmation_code(imap_user, imap_pass, timeout=EMAIL_CODE_TIMEOUT)
+                code = fetch_confirmation_code(
+                    imap_user, imap_pass,
+                    timeout=EMAIL_CODE_TIMEOUT,
+                    min_uid=imap_baseline,
+                )
             except RuntimeError as e:
                 log.append(f"  ⚠️ IMAP: {str(e)[:100]}")
                 code = None
 
             if code:
                 log.append(f"  ✉️ Код: {code}")
+                entered = False
                 for sel in [
+                    "input[placeholder*='код']",
+                    "input[placeholder*='code']",
+                    "input[placeholder*='Отправьте']",
                     "input[name='confirmation_code']",
                     "input[name='code']",
                     "input[maxlength='6']",
-                    "input[placeholder*='code']",
                 ]:
                     try:
                         el = page.locator(sel).first
                         if el.count() > 0 and el.is_visible(timeout=2000):
                             el.fill(code)
                             time.sleep(0.5)
-                            page.get_by_role("button", name="Submit").click(timeout=5000)
-                            time.sleep(2.0)
+                            entered = True
                             break
                     except Exception:
                         continue
+
+                if not entered:
+                    log.append("  ⚠️ Поле для кода не найдено")
+                else:
+                    # Click confirm button (Подтвердить or Submit)
+                    for btn_name in ["Подтвердить", "Отправить", "Submit", "Confirm"]:
+                        try:
+                            page.get_by_role("button", name=btn_name).click(timeout=5000)
+                            log.append(f"  ✅ Код введён, нажата кнопка «{btn_name}»")
+                            # Wait for page to navigate away from the popup
+                            try:
+                                page.wait_for_url(
+                                    lambda url: "help/contact" not in url or "sent" in url.lower(),
+                                    timeout=10000,
+                                )
+                            except Exception:
+                                time.sleep(8.0)
+                            log.append(f"  🌐 После кода URL: {page.url}")
+                            log.append(f"  📄 После кода заголовок: {page.title()}")
+                            try:
+                                page.screenshot(path=str(
+                                    Path(__file__).parent / "cookies" / "submit_result.png"
+                                ))
+                            except Exception:
+                                pass
+                            break
+                        except Exception:
+                            continue
             else:
                 log.append(f"  ⚠️ Код не пришёл за {EMAIL_CODE_TIMEOUT}с")
 
