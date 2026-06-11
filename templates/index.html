@@ -1211,5 +1211,22 @@
   fetchStatus();
   setInterval(checkSession, 10000);
 </script>
+<!-- Chatwoot widget (intercom.atomgroup.dev — Website MVP inbox) -->
+<script>
+  (function(d,t) {
+    var BASE_URL="https://intercom.atomgroup.dev";
+    var g=d.createElement(t),s=d.getElementsByTagName(t)[0];
+    g.src=BASE_URL+"/packs/js/sdk.js";
+    g.defer = true;
+    g.async = true;
+    s.parentNode.insertBefore(g,s);
+    g.onload=function(){
+      window.chatwootSDK.run({
+        websiteToken: "4KphhMJk3QVXbJVhrC9ujbCu",
+        baseUrl: BASE_URL
+      })
+    }
+  })(document,"script");
+</script>
 </body>
 </html>
